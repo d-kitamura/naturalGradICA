@@ -1,16 +1,15 @@
 function [y,W,cost] = naturalGradIca(x,stepSize,maxIt,type,backProjection,drawCost,initW)
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% naturalGradIca: Blind source separation using ICA based on natural Grad.%
-%                                                                         %
-% Coded by D. Kitamura (d-kitamura@ieee.org)                              %
-%                                                                         %
-% # Original paper                                                        %
-% S. Amari, "Natural gradient works efficiently in learning," Neural      %
-% Computation, vol. 10, no. 2, pp. 251-276, 1998.                         %
-%                                                                         %
-% see also                                                                %
-% http://d-kitamura.net                                                   %
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% naturalGradIca: Blind source separation using ICA based on natural Grad.
+%
+% Coded by D. Kitamura (d-kitamura@ieee.org)
+%
+% # Original paper
+% S. Amari, "Natural gradient works efficiently in learning," Neural
+% Computation, vol. 10, no. 2, pp. 251-276, 1998.
+%
+% see also
+% http://d-kitamura.net
 %
 % [syntax]
 %   [y,W,cost] = naturalGradIca(x)
