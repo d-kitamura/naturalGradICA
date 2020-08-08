@@ -105,13 +105,9 @@ if backProjection ~= 0
     if backProjection > nCh
         error('Value of backProjection is incorrect.\n');
     else
-        tmp = zeros(nCh, nSample); % memory allocation
-        for n = 1:nCh
-            ych = [ zeros(n-1,nSample); y(n,:); zeros(nCh-n,nSample)]; % ych has 0 rows except for nth row
-            yp = W \ ych; % calculate inv(W)*ych for scale fixing
-            tmp(n,:) = yp(backProjection,:); % store only "backProjection"th row
-        end
-        y = tmp;
+        B = (x*y')/(y*y'); % closed-form solution of min_D |x-Dy|^2
+        y = (B(backProjection,:).').*y; % using implicit expansion
+        W = diag(B(backProjection,:))*W; % demixing matrix after applying back projection
     end
 else
     y = y ./ max(max(abs(y))); % Since output scale of ICA is undetermined, apply normalization
