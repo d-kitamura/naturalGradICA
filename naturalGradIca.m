@@ -114,7 +114,8 @@ if backProjection ~= 0
         y = tmp;
     end
 else
-    y = y ./ abs(max(y, 2)); % Since output scale of ICA is undetermined, apply normalization
+    y = y ./ max(max(abs(y))); % Since output scale of ICA is undetermined, apply normalization
+    W = max(max(abs(y)))*W;
 end
 fprintf(' Natural Gradient ICA done.\n');
 end
