@@ -21,7 +21,7 @@ outputDir = "./output/";
 mixMat = [0.3, 0.6, -0.8; ...
          -0.2, 0.5, 0.9; ...
          -0.3, 0.6, -0.7]; % mixing matrix (3 x 3)
-stepSize = 0.2; % step size parameter
+stepSize = 0.1; % step size parameter
 maxIt = 100; % maximum number of iterations in natural gradient algorithm
 type = "LAP"; % type of score function ("LAP": super-Gaussian, "SEC": super-Gaussian, "COS": sub-Gaussian)
 refMic = 1; % reference channel for back projection technique
