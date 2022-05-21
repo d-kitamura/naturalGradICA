@@ -11,42 +11,39 @@
 % See also:                                                               %
 % http://d-kitamura.net                                                   %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-clear;
-close all;
+clear; close all; clc;
 
 % Parameters
-wavPath1 = sprintf('./input/drums.wav'); % file path of wav signal
-wavPath2 = sprintf('./input/guitar.wav'); % file path of wav signal
-wavPath3 = sprintf('./input/piano.wav'); % file path of wav signal
-outputDir = sprintf('./output');
-A = [0.3, 0.6, -0.8; ...
-    -0.2, 0.5, 0.9; ...
-    -0.3, 0.6, -0.7]; % mixing matrix (3 x 3)
+wavPath(1) = "./input/drums.wav"; % file path of wav signal
+wavPath(2) = "./input/guitar.wav"; % file path of wav signal
+wavPath(3) = "./input/piano.wav"; % file path of wav signal
+outputDir = "./output/";
+mixMat = [0.3, 0.6, -0.8; ...
+         -0.2, 0.5, 0.9; ...
+         -0.3, 0.6, -0.7]; % mixing matrix (3 x 3)
 stepSize = 0.2; % step size parameter
 maxIt = 100; % maximum number of iterations in natural gradient algorithm
-type = 'laplace'; % type of score function (laplace: super-Gaussian, sech: super-Gaussian, cosh: sub-Gaussian)
-backProjection = 1; % channel of back projection
-drawCost = true; % draw convergence behavior of cost function values or not
+type = "LAP"; % type of score function ("LAP": super-Gaussian, "SEC": super-Gaussian, "COS": sub-Gaussian)
+refMic = 1; % reference channel for back projection technique
+isDrawCost = true; % draw convergence behavior of cost function values or not
 
-% Audio read and mixing
-[s1,fs] = audioread(wavPath1); % fs: sampling frequency [Hz], s1 is a vector of size "length x channels"
-[s2,fs] = audioread(wavPath2); % s1, s2, and s3 are column vectors because sample wave files are monaural
-[s3,fs] = audioread(wavPath3);
-s = [s1.'; s2.'; s3.']; % source signal of size "3 x length"
-x = A * s; % observed (mixture) signal of size "3 x length"
-
-% ICA
-[y, W, cost] = naturalGradIca(x, stepSize, maxIt, type, backProjection, drawCost);
-
-% Output separated signals
-if ~isdir(outputDir)
-    mkdir(outputDir);
+% Read source signals
+for iSrc = 1:numel(wavPath)
+    [srcSig(:, iSrc), fs] = audioread(wavPath(iSrc)); % srcSig: "signal length x channels", fs: sampling frequency [Hz], 
 end
-audiowrite(sprintf('%s/observedMixture.wav', outputDir), x.', fs); % observed signal
-audiowrite(sprintf('%s/estimatedSignal1.wav', outputDir), y(1,:).', fs); % estimated signal 1
-audiowrite(sprintf('%s/estimatedSignal2.wav', outputDir), y(2,:).', fs); % estimated signal 2
-audiowrite(sprintf('%s/estimatedSignal3.wav', outputDir), y(3,:).', fs); % estimated signal 3
 
-fprintf('The files are saved in "./output".\n');
+% Mix source signals
+obsSig = mixMat * srcSig.'; % observed (mixture) signal of size "3 x length"
+obsSig = obsSig.'; % time samples x 3
+
+% Apply ICA
+[estSig, demixMat, cost] = naturalGradIca(obsSig, "stepSize", stepSize, "nIter", maxIt, "srcType", type, "chBackProj", refMic, "isPlot", isDrawCost);
+
+% Output estimated signals
+if ~isfolder(outputDir); mkdir(outputDir); end
+audiowrite(outputDir + "obsSig.wav", obsSig, fs); % observed signal
+audiowrite(outputDir + "estSig1.wav", estSig(:, 1), fs); % estimated signal 1
+audiowrite(outputDir + "estSig2.wav", estSig(:, 2), fs); % estimated signal 2
+audiowrite(outputDir + "estSig3.wav", estSig(:, 3), fs); % estimated signal 3
+fprintf("The files are saved in " + outputDir + ".\n");
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EOF %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

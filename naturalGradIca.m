@@ -1,140 +1,130 @@
-function [y,W,cost] = naturalGradIca(x,stepSize,maxIt,type,backProjection,drawCost,initW)
-%
+function [estSig, demixMat, cost] = naturalGradIca(obsSig, args)
 % naturalGradIca: Blind source separation using ICA based on natural Grad.
-%
 % Coded by D. Kitamura (d-kitamura@ieee.org)
 %
-% # Original paper
-% S. Amari, "Natural gradient works efficiently in learning," Neural
-% Computation, vol. 10, no. 2, pp. 251-276, 1998.
-%
-% see also
-% http://d-kitamura.net
-%
 % [syntax]
-%   [y,W,cost] = naturalGradIca(x)
-%   [y,W,cost] = naturalGradIca(x,stepSize)
-%   [y,W,cost] = naturalGradIca(x,stepSize,maxIt)
-%   [y,W,cost] = naturalGradIca(x,stepSize,maxIt,type)
-%   [y,W,cost] = naturalGradIca(x,stepSize,maxIt,type,backProjection)
-%   [y,W,cost] = naturalGradIca(x,stepSize,maxIt,type,backProjection,drawCost)
-%   [y,W,cost] = naturalGradIca(x,stepSize,maxIt,type,backProjection,drawCost,initW)
+%   [estSig, demixMat, cost] 
+%        = naturalGradIca(obsSig, "stepSize", 0.1, "nIter", 100, 
+%                         "srcType", "LAP", "chBackProj", 1, 
+%                         "isPlot", false, "demixMat", randn(size(x, 2)))
 %
 % [inputs]
-%              x: mixture signal (sources x time samples)
-%       stepSize: initial step size for natural gradient algorithm (default: 1)
-%          maxIt: maximum number of iterations (default: 100)
-%           type: choose score function from below (default: laplace)
-%                 'laplace' : super-Gaussian, y/abs(y)
-%                 'sech'    : super-Gaussian, tanh(y)
-%                 'cosh'    : sub-Gaussian, y-tanh(y)
-% backProjection: channel of applying back projection (0: do not apply, number: projection channel, default: 1)
-%       drawCost: show convergence behavior of cost function values or not (true or false, default: false)
-%          initW: initial demixing matrix (sources x channels, square matrix)
+%     obsSig: observed mixture signal (time samples x channels)
+%   stepSize: initial step size for natural gradient algorithm (default: 1)
+%      nIter: maximum number of iterations (default: 100)
+%    srcType: choose score function from below (default: "LAP")
+%             "LAP" : super-Gaussian (laplace dist.), y/abs(y)
+%             "SEC"    : super-Gaussian (sech dist.), tanh(y)
+%             'COS'    : sub-Gaussian (cosh dist.), y-tanh(y)
+% chBackProj: channel of applying back projection (0: do not apply, number: projection channel, default: 1)
+%     isPlot: show convergence behavior of cost function values or not (true or false, default: false)
+%   demixMat: initial demixing matrix (sources x channels, square matrix)
 %
 % [outputs]
-%              y: estimated signals (sources x time samples)
-%              W: estimated demixing matrix (sources x channels)
-%           cost: convergence behavior of cost function values (maxIt+1 x 1)
+%     estSig: estimated signals (time samples x sources)
+%   demixMat: estimated demixing matrix (sources x channels)
+%       cost: convergence behavior of cost function values (args.nIter+1 x 1)
 %
 
 % Check errors and set default values
-[nCh,nSample] = size(x);
-if (nCh == 1)
-    error('The input mixture signal must be monaural.\n');
-elseif (nCh > nSample)
-    x = x.'; % transpose x because definition of x is wrong
+arguments
+    obsSig (:, :) double
+    args.stepSize (1, 1) double {mustBePositive} = 0.1
+    args.nIter (1, 1) double {mustBePositive, mustBeInteger} = 100
+    args.srcType (1, 1) string {mustBeMember(args.srcType, ["LAP", "SEC", "COS"])} = "LAP"
+    args.chBackProj (1, 1) double {mustBeNonnegative, mustBeInteger} = 1
+    args.isPlot (1, 1) logical = false
+    args.demixMat (:, :) double = randn(size(obsSig, 2))
 end
-if (nargin < 2)
-    stepSize = 1; % default value of step size
-end
-if (nargin < 3)
-    maxIt = 100; % default value of maximum number of iterations
-end
-if (nargin < 4)
-    type = 'laplace'; % default score function
-elseif ~strcmp(type, 'laplace') && ~strcmp(type, 'sech') && ~strcmp(type, 'cosh')
-    error('Input type (score function) is not supported.\n');
-end
-if (nargin < 5)
-    backProjection = 1; % default backProjection (apply back projection onto 1st channel)
-end
-if (nargin < 6)
-    drawCost = true; % default drawCost (do not show convergence behavior)
-end
-if (nargin < 7)
-    W = randn(nCh); % initialize W with random values
-else
-    if size(initW,1) ~= nCh || size(initW,2) ~= nCh || size(initW,3) ~= 1
-        error('The size of input initial W might be wrong.\n');
-    end
-    W = initW; % initialize W with input values
-end
+nCh = size(obsSig, 2);
+if (nCh == 1); error("x must be multichannel signal.\n"); end
+if ~all(size(args.demixMat) == [nCh, nCh], "all"); error("The size of initial demixing matrix is wrong.\n"); end
 
 % ICA iteration based on natural gradient algorithm
-I = eye(nCh); % identity matrix
-y = W * x; % initial estimated signal
-if drawCost
-    cost = zeros(maxIt+1,1); % memory allocation
-    cost(1,1) = calcCost_local(W, y, nSample, type); % initial cost value
-else
-    cost = 0;
-end
-fprintf('Iteration:     ');
-for it = 1:maxIt
-    sy = scoreFunc_local(y, type); % score function value
-    E = (sy * y.') / nSample; % sum of inner product values of sy and y, E is a matrix of size "nCh x nCh"
-    W = W - stepSize * (E - I) * W; % update rule based on natural gradient
-    y = W * x; % update of separated signal
-    if drawCost
-        cost(it+1,1) = calcCost_local(W, y, nSample, type); % calculate cost function value in ICA
-    end
-    fprintf('\b\b\b\b%4d', it); % display current iteration number
-end
+[estSig, demixMat, cost] = local_naturalGradIca(obsSig, args.demixMat, args.stepSize, args.nIter, args.srcType, args.isPlot);
 
-% Draw cost function convergence
-if drawCost
-    plot((0:maxIt),cost);
-    set(gca, 'FontName', 'Arial', 'FontSize', 14);
-    xlabel('Number of iteration', 'FontSize', 15);
-    ylabel('Value of cost function', 'FontSize', 15);
-end
+% Plot cost function behavior
+if args.isPlot; local_plotCost(cost); end
 
 % Apply back projection or normalization
-if backProjection ~= 0
-    if backProjection > nCh
-        error('Value of backProjection is incorrect.\n');
-    else
-        B = (x*y')/(y*y'); % closed-form solution of min_D |x-Dy|^2
-        y = (B(backProjection,:).').*y; % using implicit expansion
-        W = diag(B(backProjection,:))*W; % demixing matrix after applying back projection
-    end
-else
-    y = y ./ max(max(abs(y))); % Since output scale of ICA is undetermined, apply normalization
-    W = max(max(abs(y)))*W;
+[estSig, demixMat] = local_backProjection(estSig, obsSig, demixMat, args.chBackProj);
 end
+
+%% Local functions
+%--------------------------------------------------------------------------
+function [y, W, cost] = local_naturalGradIca(x, W, mu, nIter, type, isPlot)
+% Initialization
+x = x.';
+[nCh, nSample] = size(x);
+I = eye(nCh); % identity matrix
+y = W*x; % initial estimated signal
+cost = zeros(nIter+1,1); % memory allocation
+if isPlot; cost(1,1) = local_calcCost(W, y, nSample, type); end
+
+% Update iteration based on natural gradient algorithm
+fprintf('Iteration:     ');
+for iIter = 1:nIter
+    sy = local_scoreFunc(y, type); % score function value
+    E = (sy*y.') / nSample; % sum of inner product values of sy and y, E is a matrix of size "nCh x nCh"
+    W = W - mu*(E-I)*W; % update rule based on natural gradient
+    y = W*x; % update of separated signal
+    if isPlot; cost(iIter+1, 1) = local_calcCost(W, y, nSample, type); end
+    fprintf('\b\b\b\b%4d', iIter); % display current iteration number
+end
+y = y.'; % sources x time samples
 fprintf(' Natural Gradient ICA done.\n');
 end
 
-% Local functions
-function sy = scoreFunc_local(y, type) % calculate score function (-log p(y))'
-if strcmp(type, 'laplace')
+%--------------------------------------------------------------------------
+function sy = local_scoreFunc(y, type) % calculate score function (-log p(y))'
+if type == "LAP" % Laplace
     sy = y./abs(y);
-elseif strcmp(type, 'sech')
+elseif type == "SEC" % sech
     sy = tanh(y);
-elseif strcmp(type, 'cosh')
+elseif type == "COS" % cosh
     sy = y-tanh(y);
 end
 end
 
-function cost = calcCost_local(W, y, T, type) % calculate ICA cost function value
-if strcmp(type, 'laplace')
-    py = (1/2)*exp(-1*abs(y)); % likelihood
-elseif strcmp(type, 'sech')
-    py = sech(y)/pi; % likelihood
-elseif strcmp(type, 'cosh')
-    py = exp(-y.^2/2).*cosh(y); % likelihood
+%--------------------------------------------------------------------------
+function cost = local_calcCost(W, y, T, type) % calculate ICA cost function value
+if type == "LAP" % Laplace
+    py = (1/2)*exp(-1*abs(y));
+elseif type == "SEC" % sech
+    py = sech(y)/pi;
+elseif type == "COS" % cosh
+    py = exp(-y.^2/2).*cosh(y);
 end
-cost = -log(abs(det(W))) - (1/T)*sum(sum(log(py))); % cost function in ICA
+cost = -log(abs(det(W))) - (1/T)*sum(sum(log(py))); % cost function in ICA (negative log likelihood)
+end
+
+%--------------------------------------------------------------------------
+function [y, W] = local_backProjection(y, x, W, ch)
+y = y.'; % sources x time samples
+x = x.'; % channels x time samples
+nCh = size(x, 1);
+if ch ~= 0 % apply back projection technique
+    if ch > nCh
+        error("Channel for back projection technique is incorrect.\n");
+    else
+        D = (x*y')/(y*y'); % closed-form solution of min_D |x-Dy|^2
+        y = (D(ch, :).').*y; % using implicit expansion
+        W = diag(D(ch, :))*W; % demixing matrix after applying back projection
+    end
+else % Since output scale of ICA is undetermined, apply normalization
+    normCoef = max(abs(y), [], "all");
+    y = y ./ normCoef;
+    W = normCoef*W;
+end
+y = y.'; % time samples x sources
+end
+
+%--------------------------------------------------------------------------
+function local_plotCost(cost)
+    plot((0:size(cost, 1)-1), cost);
+    set(gca, "FontName", "Arial", "FontSize", 14);
+    xlabel("Number of iteration", "FontSize", 14);
+    ylabel("Value of cost function", "FontSize", 14);
+    grid on;
 end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EOF %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
